@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>4ME Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f8ff;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: #1e66ff;
+    }
+    section {
+      background: white;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin: 6px 0;
+    }
+    button {
+      background: #1e66ff;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #144fd1;
+    }
+    .order {
+      border-bottom: 1px solid #ddd;
+      padding: 10px 0;
+    }
+    small {
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<h1>4ME – Admin Dashboard</h1>
+
+<section>
+  <h2>Add Product</h2>
+
+  <input id="pName" placeholder="Product name" />
+  <input id="pPrice" placeholder="Price" />
+
+  <p><b>Image upload (optional)</b></p>
+  <input type="file" id="pFile" />
+
+  <p><b>OR Image URL</b></p>
+  <input id="pImageUrl" placeholder="https://example.com/image.jpg" />
+
+  <button onclick="addProduct()">Add Product</button>
+</section>
+
+<section>
+  <h2>Orders</h2>
+  <div id="orders"></div>
+</section>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    addDoc,
+    getDocs,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+  import {
+    getAuth,
+    onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+  import {
+    getStorage,
+    ref,
+    uploadBytes,
+    getDownloadURL
+  } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAzJmA3ESY7rcVyB9WP2fyAPoX-WDfsWtY",
+    authDomain: "me-ad192.firebaseapp.com",
+    projectId: "me-ad192",
+    storageBucket: "me-ad192.firebasestorage.app",
+    messagingSenderId: "496094300165",
+    appId: "1:496094300165:web:a3be380ffa7e2abb14346c"
+  };
+
+  const ADMIN_EMAIL = "arnavraj3112@gmail.com";
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const storage = getStorage(app);
+
+  // -------- AUTH GUARD --------
+  onAuthStateChanged(auth, user => {
+    if (!user || user.email !== ADMIN_EMAIL) {
+      window.location.href = "index.html";
+    }
+  });
+
+  // -------- ADD PRODUCT --------
+  window.addProduct = async () => {
+    const name = pName.value.trim();
+    const price = Number(pPrice.value);
+    const file = pFile.files[0];
+    const imageUrlInput = pImageUrl.value.trim();
+
+    if (!name || !price) {
+      alert("Name and price required");
+      return;
+    }
+
+    let imageUrl = "";
+
+    if (file) {
+      const imgRef = ref(storage, `products/${Date.now()}_${file.name}`);
+      await uploadBytes(imgRef, file);
+      imageUrl = await getDownloadURL(imgRef);
+    } else if (imageUrlInput) {
+      imageUrl = imageUrlInput;
+    } else {
+      alert("Provide image upload or image URL");
+      return;
+    }
+
+    await addDoc(collection(db, "products"), {
+      name,
+      price,
+      imageUrl,
+      createdAt: serverTimestamp()
+    });
+
+    alert("Product added");
+    pName.value = "";
+    pPrice.value = "";
+    pFile.value = "";
+    pImageUrl.value = "";
+  };
+
+  // -------- LOAD ORDERS --------
+  async function loadOrders() {
+    const snap = await getDocs(collection(db, "orders"));
+    const box = document.getElementById("orders");
+    box.innerHTML = "";
+
+    snap.forEach(doc => {
+      const o = doc.data();
+      box.innerHTML += `
+        <div class="order">
+          <b>${o.customer.name}</b><br>
+          ${o.customer.phone}<br>
+          ${o.customer.address}<br>
+          <small>Payment: ${o.payment}</small><br>
+          <small>Status: ${o.status}</small>
+        </div>
+      `;
+    });
+  }
+
+  loadOrders();
+</script>
+
+</body>
+</html>
