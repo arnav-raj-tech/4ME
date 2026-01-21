@@ -3,20 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <title>4ME Store</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background: #f5f9ff;
-      color: #222;
+      background: #f4f8ff;
+      color: #111;
     }
     header {
       background: white;
-      padding: 15px 30px;
+      padding: 15px 25px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
     header h1 {
       color: #1e66ff;
@@ -27,11 +28,11 @@
       color: white;
       border: none;
       padding: 8px 14px;
+      border-radius: 6px;
       cursor: pointer;
-      border-radius: 5px;
     }
     button:hover {
-      background: #154fd6;
+      background: #144fd1;
     }
     .container {
       padding: 20px;
@@ -43,7 +44,7 @@
     }
     .card {
       background: white;
-      padding: 15px;
+      padding: 12px;
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
       text-align: center;
@@ -54,16 +55,13 @@
       object-fit: cover;
       border-radius: 5px;
     }
-    .hidden {
-      display: none;
-    }
-    input {
+    input, textarea {
       width: 100%;
       padding: 8px;
       margin: 6px 0;
     }
-    #cart {
-      margin-top: 30px;
+    .hidden {
+      display: none;
     }
   </style>
 </head>
@@ -71,24 +69,17 @@
 
 <header>
   <h1>4ME</h1>
-  <button onclick="showAdmin()">Admin</button>
+  <button onclick="openLogin()">Admin Login</button>
 </header>
 
 <div class="container">
 
-  <!-- ADMIN PANEL -->
-  <div id="adminPanel" class="hidden">
+  <!-- ADMIN LOGIN -->
+  <div id="loginBox" class="hidden">
     <h2>Admin Login</h2>
-    <input id="adminCode" placeholder="Enter admin code" />
-    <button onclick="checkAdmin()">Enter</button>
-
-    <div id="addProduct" class="hidden">
-      <h3>Add Product</h3>
-      <input id="pName" placeholder="Product name" />
-      <input id="pPrice" placeholder="Price" />
-      <input id="pImage" placeholder="Image URL" />
-      <button onclick="addProduct()">Add</button>
-    </div>
+    <input id="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Password" />
+    <button onclick="login()">Login</button>
   </div>
 
   <!-- PRODUCTS -->
@@ -96,79 +87,104 @@
   <div class="products" id="productList"></div>
 
   <!-- CART -->
-  <div id="cart">
-    <h2>Cart</h2>
-    <ul id="cartItems"></ul>
-    <button onclick="checkout()">Checkout (COD)</button>
-  </div>
+  <h2>Checkout (COD)</h2>
+  <input id="custName" placeholder="Full Name" />
+  <input id="custPhone" placeholder="Phone Number" />
+  <textarea id="custAddress" placeholder="Full Address"></textarea>
+  <button onclick="placeOrder()">Place Order</button>
 
 </div>
 
-<script>
-  const ADMIN_CODE = "GOATS-4ME";
-  let products = JSON.parse(localStorage.getItem("products")) || [];
+<!-- FIREBASE -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+  import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from
+    "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from
+    "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAzJmA3ESY7rcVyB9WP2fyAPoX-WDfsWtY",
+    authDomain: "me-ad192.firebaseapp.com",
+    projectId: "me-ad192",
+    storageBucket: "me-ad192.firebasestorage.app",
+    messagingSenderId: "496094300165",
+    appId: "1:496094300165:web:a3be380ffa7e2abb14346c"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  const ADMIN_EMAIL = "arnavraj3112@gmail.com";
   let cart = [];
 
-  function showAdmin() {
-    document.getElementById("adminPanel").classList.toggle("hidden");
-  }
+  // ---------- AUTH ----------
+  window.openLogin = () => {
+    document.getElementById("loginBox").classList.toggle("hidden");
+  };
 
-  function checkAdmin() {
-    const code = document.getElementById("adminCode").value;
-    if (code === ADMIN_CODE) {
-      document.getElementById("addProduct").classList.remove("hidden");
-    } else {
-      alert("Wrong code");
+  window.login = async () => {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+
+    await signInWithEmailAndPassword(auth, email, password);
+  };
+
+  onAuthStateChanged(auth, user => {
+    if (user && user.email === ADMIN_EMAIL) {
+      window.location.href = "admin.html";
     }
-  }
+  });
 
-  function addProduct() {
-    const name = pName.value;
-    const price = pPrice.value;
-    const image = pImage.value;
-    if (!name || !price || !image) return alert("Fill all fields");
+  // ---------- PRODUCTS ----------
+  async function loadProducts() {
+    const snap = await getDocs(collection(db, "products"));
+    const list = document.getElementById("productList");
+    list.innerHTML = "";
 
-    products.push({ name, price, image });
-    localStorage.setItem("products", JSON.stringify(products));
-    renderProducts();
-  }
-
-  function renderProducts() {
-    productList.innerHTML = "";
-    products.forEach((p, i) => {
-      productList.innerHTML += `
+    snap.forEach(doc => {
+      const p = doc.data();
+      list.innerHTML += `
         <div class="card">
-          <img src="${p.image}">
+          <img src="${p.imageUrl}">
           <h4>${p.name}</h4>
           <p>₹${p.price}</p>
-          <button onclick="addToCart(${i})">Add to Cart</button>
+          <button onclick='addToCart(${JSON.stringify(p)})'>Add</button>
         </div>
       `;
     });
   }
 
-  function addToCart(i) {
-    cart.push(products[i]);
-    renderCart();
-  }
+  window.addToCart = (product) => {
+    cart.push(product);
+    alert("Added to cart");
+  };
 
-  function renderCart() {
-    cartItems.innerHTML = "";
-    cart.forEach(p => {
-      cartItems.innerHTML += `<li>${p.name} - ₹${p.price}</li>`;
+  // ---------- ORDER ----------
+  window.placeOrder = async () => {
+    const name = custName.value.trim();
+    const phone = custPhone.value.trim();
+    const address = custAddress.value.trim();
+
+    if (!name || !phone || !address || cart.length === 0) {
+      alert("Fill all details and add products");
+      return;
+    }
+
+    await addDoc(collection(db, "orders"), {
+      items: cart,
+      customer: { name, phone, address },
+      payment: "COD",
+      status: "pending",
+      createdAt: serverTimestamp()
     });
-  }
 
-  function checkout() {
-    if (cart.length === 0) return alert("Cart is empty");
-    let summary = "Order Summary (COD):\n\n";
-    cart.forEach(p => summary += `${p.name} - ₹${p.price}\n`);
-    alert(summary);
+    alert("Order placed successfully");
     cart = [];
-    renderCart();
-  }
+  };
 
-  renderProducts();
+  loadProducts();
 </script>
 
 </body>
